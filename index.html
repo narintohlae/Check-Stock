@@ -14,7 +14,7 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, 'Sarabun', sans-serif; /* เพิ่ม Sarabun เผื่อฟอนต์ไทย */
             background-color: var(--bg-color);
             margin: 0;
             padding: 20px;
@@ -24,12 +24,14 @@
         .container {
             max-width: 600px;
             margin: 0 auto;
+            padding-bottom: 50px;
         }
 
         h1 {
             text-align: center;
             margin-bottom: 20px;
             font-size: 1.5rem;
+            color: #333;
         }
 
         /* Search Box Styles */
@@ -38,7 +40,7 @@
             top: 10px;
             z-index: 100;
             margin-bottom: 20px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
             background: white;
             padding: 10px;
             border-radius: 12px;
@@ -52,7 +54,7 @@
             font-size: 16px;
             box-sizing: border-box;
             outline: none;
-            transition: border-color 0.2s;
+            transition: all 0.2s;
         }
 
         input[type="text"]:focus {
@@ -63,53 +65,89 @@
         #loading {
             text-align: center;
             color: var(--text-sub);
-            margin-top: 20px;
+            margin-top: 50px;
+            font-size: 1.1rem;
         }
 
-        /* Product List (Card Style for Mobile) */
+        /* Product List */
         .product-list {
             display: grid;
-            gap: 15px;
+            gap: 12px;
         }
 
         .product-card {
             background: var(--card-bg);
             padding: 15px;
             border-radius: 12px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
             display: flex;
             justify-content: space-between;
             align-items: center;
+            border-left: 5px solid transparent; /* เตรียมไว้สำหรับสีสถานะ */
+            transition: transform 0.1s;
+        }
+
+        .product-card:active {
+            transform: scale(0.98);
+        }
+
+        .product-info {
+            flex: 1;
+            padding-right: 10px;
         }
 
         .product-info h3 {
             margin: 0 0 5px 0;
             font-size: 1.1rem;
+            color: #111;
         }
 
-        .product-code {
+        .details {
             font-size: 0.85rem;
             color: var(--text-sub);
-            background: #eee;
-            padding: 2px 6px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .tag {
+            background: #f0f0f0;
+            padding: 2px 8px;
             border-radius: 4px;
-            display: inline-block;
+        }
+
+        .price-tag {
+            color: var(--primary-color);
+            font-weight: bold;
         }
 
         .stock-badge {
             text-align: center;
-            min-width: 80px;
-            padding: 8px 12px;
+            min-width: 70px;
+            padding: 8px 5px;
             border-radius: 8px;
-            font-weight: bold;
             color: white;
+            font-weight: bold;
             font-size: 0.9rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .stock-label {
+            font-size: 0.7rem;
+            font-weight: normal;
+            opacity: 0.9;
         }
 
         /* Stock Status Colors */
-        .stock-high { background-color: #10b981; } /* Green */
-        .stock-low { background-color: #f59e0b; }  /* Orange */
-        .stock-out { background-color: #ef4444; }  /* Red */
+        .status-ok { border-left-color: #10b981; }
+        .status-low { border-left-color: #f59e0b; }
+        .status-out { border-left-color: #ef4444; }
+
+        .bg-ok { background-color: #10b981; }
+        .bg-low { background-color: #f59e0b; }
+        .bg-out { background-color: #ef4444; }
 
     </style>
 </head>
@@ -119,94 +157,111 @@
         <h1>📦 เช็คสต็อกสินค้า</h1>
         
         <div class="search-box">
-            <input type="text" id="searchInput" placeholder="🔍 ค้นหาชื่อสินค้า หรือรหัส...">
+            <input type="text" id="searchInput" placeholder="🔍 ค้นหาชื่อ, รหัส หรือบาร์โค้ด...">
         </div>
 
-        <div id="loading">กำลังโหลดข้อมูล...</div>
+        <div id="loading">⏳ กำลังโหลดข้อมูล...</div>
         <div id="productList" class="product-list"></div>
     </div>
 
     <script>
-        // URL ของ Google Apps Script ที่คุณให้มา
         const API_URL = 'https://script.google.com/macros/s/AKfycbxckFq5gHuPwv75iplUr4SlSd-xJyEQbu8Ikma2_GBHZ5ICxUUW2z3SwwtBjSDZiI_X/exec';
         
         let allProducts = [];
 
-        // ฟังก์ชันดึงข้อมูลเมื่อโหลดหน้าเว็บ
+        // ฟังก์ชันจัดรูปแบบตัวเลข (ใส่ลูกน้ำ)
+        function formatNumber(num) {
+            return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        }
+
         async function fetchStock() {
             try {
                 const response = await fetch(API_URL);
-                const data = await response.json();
+                const json = await response.json();
                 
-                // ตรวจสอบโครงสร้างข้อมูล (สมมติว่า API ส่งกลับมาเป็น data หรือ array โดยตรง)
-                // ถ้า API ส่งมาแบบ { data: [...] } ให้ใช้ data.data
-                // ถ้าส่งมาเป็น [...] เลย ให้ใช้ data
-                allProducts = Array.isArray(data) ? data : (data.data || []);
+                // รองรับทั้งแบบที่ส่งมาเป็น Array โดยตรง หรืออยู่ใน Object
+                allProducts = Array.isArray(json) ? json : (json.data || json.user || []);
 
                 document.getElementById('loading').style.display = 'none';
                 renderProducts(allProducts);
             } catch (error) {
                 console.error('Error:', error);
-                document.getElementById('loading').innerHTML = '❌ ไม่สามารถดึงข้อมูลได้ <br>กรุณาตรวจสอบลิงก์ หรือตั้งค่าสิทธิ์การเข้าถึง';
+                document.getElementById('loading').innerHTML = '❌ เชื่อมต่อไม่ได้<br><small>ตรวจสอบลิงก์ หรือตั้งค่าสิทธิ์เป็น Anyone</small>';
             }
         }
 
-        // ฟังก์ชันแสดงผลสินค้า
         function renderProducts(products) {
             const list = document.getElementById('productList');
             list.innerHTML = '';
 
-            if (products.length === 0) {
-                list.innerHTML = '<div style="text-align:center; color:#888;">ไม่พบสินค้า</div>';
+            if (!products || products.length === 0) {
+                list.innerHTML = '<div style="text-align:center; color:#888; margin-top:20px;">ไม่พบสินค้า</div>';
                 return;
             }
 
             products.forEach(item => {
-                // *** แก้ไขชื่อ Key ตรงนี้ให้ตรงกับ JSON ของคุณ ***
-                // เช่นถ้าใน Google Sheet หัวตารางคือ "Code", "Name", "Qty" ให้แก้ตามนั้น
-                const code = item.id || item.Code || item.code || '-'; 
-                const name = item.name || item.Name || 'สินค้าไม่ระบุชื่อ';
-                const qty = parseInt(item.qty || item.Qty || item.stock || 0);
+                // --- MAPPING DATA (จุดสำคัญที่แก้ให้ตรงกับตารางคุณ) ---
+                const code = item['รหัสสินค้า'] || '-';
+                const name = item['ชื่อการค้า'] || 'ไม่ระบุชื่อ';
+                const unit = item['หน่วย'] || '';
+                const price = item['ราคา'] ? formatNumber(item['ราคา']) : '0';
+                const qty = parseInt(item['คงเหลือ'] || 0);
+                // --------------------------------------------------
 
-                // กำหนดสีตามจำนวนคงเหลือ
-                let badgeClass = 'stock-high';
-                let statusText = `${qty} ชิ้น`;
-
-                if (qty === 0) {
-                    badgeClass = 'stock-out';
-                    statusText = 'สินค้าหมด';
-                } else if (qty < 5) { // เตือนเมื่อเหลือน้อยกว่า 5
-                    badgeClass = 'stock-low';
+                // กำหนดสถานะสี
+                let statusClass = 'status-ok';
+                let bgClass = 'bg-ok';
+                
+                if (qty <= 0) {
+                    statusClass = 'status-out';
+                    bgClass = 'bg-out';
+                } else if (qty < 5) { // เตือนเมื่อต่ำกว่า 5
+                    statusClass = 'status-low';
+                    bgClass = 'bg-low';
                 }
 
                 const card = document.createElement('div');
-                card.className = 'product-card';
+                card.className = `product-card ${statusClass}`;
+                
+                // HTML ของการ์ดสินค้าแต่ละใบ
                 card.innerHTML = `
                     <div class="product-info">
                         <h3>${name}</h3>
-                        <span class="product-code">รหัส: ${code}</span>
+                        <div class="details">
+                            <span class="tag">#${code}</span>
+                            <span class="price-tag">฿${price}</span>
+                            <span style="color:#666;">/${unit}</span>
+                        </div>
                     </div>
-                    <div class="stock-badge ${badgeClass}">
-                        ${statusText}
+                    <div class="stock-badge ${bgClass}">
+                        <span>${formatNumber(qty)}</span>
+                        <span class="stock-label">คงเหลือ</span>
                     </div>
                 `;
                 list.appendChild(card);
             });
         }
 
-        // ฟังก์ชันค้นหา
+        // ระบบค้นหา
         document.getElementById('searchInput').addEventListener('input', (e) => {
-            const searchText = e.target.value.toLowerCase();
+            const searchText = e.target.value.toLowerCase().trim();
+            
+            if (!searchText) {
+                renderProducts(allProducts);
+                return;
+            }
+
             const filtered = allProducts.filter(item => {
-                // *** แก้ไขชื่อ Key ตรงนี้ให้ตรงกับด้านบน ***
-                const name = (item.name || item.Name || '').toLowerCase();
-                const code = (item.id || item.Code || '').toString().toLowerCase();
-                return name.includes(searchText) || code.includes(searchText);
+                // ค้นหาจาก 3 คอลัมน์: ชื่อการค้า, รหัสสินค้า, บาร์โค้ด
+                const n = String(item['ชื่อการค้า'] || '').toLowerCase();
+                const c = String(item['รหัสสินค้า'] || '').toLowerCase();
+                const b = String(item['บาร์โค้ด'] || '').toLowerCase();
+                
+                return n.includes(searchText) || c.includes(searchText) || b.includes(searchText);
             });
             renderProducts(filtered);
         });
 
-        // เริ่มทำงาน
         fetchStock();
     </script>
 </body>
