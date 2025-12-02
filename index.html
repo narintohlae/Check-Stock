@@ -14,7 +14,7 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, 'Sarabun', sans-serif; /* เพิ่ม Sarabun เผื่อฟอนต์ไทย */
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, 'Sarabun', sans-serif;
             background-color: var(--bg-color);
             margin: 0;
             padding: 20px;
@@ -42,7 +42,7 @@
             margin-bottom: 20px;
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
             background: white;
-            padding: 10px;
+            padding: 15px;
             border-radius: 12px;
         }
 
@@ -51,22 +51,31 @@
             padding: 12px 15px;
             border: 2px solid #e5e7eb;
             border-radius: 8px;
-            font-size: 16px;
+            font-size: 18px; /* เพิ่มขนาดตัวหนังสือให้มองง่ายขึ้น */
             box-sizing: border-box;
             outline: none;
             transition: all 0.2s;
+            text-align: center; /* ให้เคอร์เซอร์อยู่ตรงกลาง พร้อมสแกน */
         }
 
         input[type="text"]:focus {
             border-color: var(--primary-color);
+            background-color: #feffff;
         }
 
-        /* Loading State */
-        #loading {
+        /* Status & Loading Message */
+        #statusMessage {
             text-align: center;
             color: var(--text-sub);
             margin-top: 50px;
             font-size: 1.1rem;
+        }
+
+        .icon-large {
+            font-size: 3rem;
+            display: block;
+            margin-bottom: 10px;
+            opacity: 0.5;
         }
 
         /* Product List */
@@ -79,16 +88,17 @@
             background: var(--card-bg);
             padding: 15px;
             border-radius: 12px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.08);
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-left: 5px solid transparent; /* เตรียมไว้สำหรับสีสถานะ */
-            transition: transform 0.1s;
+            border-left: 6px solid transparent;
+            animation: fadeIn 0.3s ease-in; /* เพิ่มลูกเล่นตอนโผล่มา */
         }
 
-        .product-card:active {
-            transform: scale(0.98);
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         .product-info {
@@ -98,12 +108,12 @@
 
         .product-info h3 {
             margin: 0 0 5px 0;
-            font-size: 1.1rem;
+            font-size: 1.2rem;
             color: #111;
         }
 
         .details {
-            font-size: 0.85rem;
+            font-size: 0.9rem;
             color: var(--text-sub);
             display: flex;
             flex-wrap: wrap;
@@ -123,12 +133,12 @@
 
         .stock-badge {
             text-align: center;
-            min-width: 70px;
-            padding: 8px 5px;
+            min-width: 75px;
+            padding: 10px 5px;
             border-radius: 8px;
             color: white;
             font-weight: bold;
-            font-size: 0.9rem;
+            font-size: 1rem;
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -138,6 +148,7 @@
             font-size: 0.7rem;
             font-weight: normal;
             opacity: 0.9;
+            margin-top: 2px;
         }
 
         /* Stock Status Colors */
@@ -157,10 +168,14 @@
         <h1>📦 เช็คสต็อกสินค้า</h1>
         
         <div class="search-box">
-            <input type="text" id="searchInput" placeholder="🔍 ค้นหาชื่อ, รหัส หรือบาร์โค้ด...">
+            <input type="text" id="searchInput" placeholder="แตะเพื่อสแกน หรือพิมพ์ค้นหา" autofocus>
         </div>
 
-        <div id="loading">⏳ กำลังโหลดข้อมูล...</div>
+        <div id="statusMessage">
+            <span class="icon-large">⏳</span>
+            กำลังโหลดฐานข้อมูล...
+        </div>
+
         <div id="productList" class="product-list"></div>
     </div>
 
@@ -169,7 +184,6 @@
         
         let allProducts = [];
 
-        // ฟังก์ชันจัดรูปแบบตัวเลข (ใส่ลูกน้ำ)
         function formatNumber(num) {
             return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
         }
@@ -179,14 +193,30 @@
                 const response = await fetch(API_URL);
                 const json = await response.json();
                 
-                // รองรับทั้งแบบที่ส่งมาเป็น Array โดยตรง หรืออยู่ใน Object
                 allProducts = Array.isArray(json) ? json : (json.data || json.user || []);
 
-                document.getElementById('loading').style.display = 'none';
-                renderProducts(allProducts);
+                // โหลดเสร็จแล้ว แต่ยังไม่แสดงสินค้า ให้แสดงข้อความพร้อมใช้งาน
+                showStatus('ready');
             } catch (error) {
                 console.error('Error:', error);
-                document.getElementById('loading').innerHTML = '❌ เชื่อมต่อไม่ได้<br><small>ตรวจสอบลิงก์ หรือตั้งค่าสิทธิ์เป็น Anyone</small>';
+                document.getElementById('statusMessage').innerHTML = '<span class="icon-large">❌</span>เชื่อมต่อฐานข้อมูลไม่ได้';
+            }
+        }
+
+        function showStatus(state) {
+            const msgDiv = document.getElementById('statusMessage');
+            const listDiv = document.getElementById('productList');
+            
+            if (state === 'ready') {
+                msgDiv.style.display = 'block';
+                listDiv.innerHTML = ''; // เคลียร์รายการ
+                msgDiv.innerHTML = '<span class="icon-large">📷</span>พร้อมสแกน<br><small>ยิงบาร์โค้ด หรือพิมพ์ชื่อสินค้าได้เลย</small>';
+            } else if (state === 'notfound') {
+                msgDiv.style.display = 'block';
+                listDiv.innerHTML = '';
+                msgDiv.innerHTML = '<span class="icon-large">🚫</span>ไม่พบสินค้า';
+            } else if (state === 'found') {
+                msgDiv.style.display = 'none'; // ซ่อนข้อความสถานะเมื่อเจอของ
             }
         }
 
@@ -194,28 +224,20 @@
             const list = document.getElementById('productList');
             list.innerHTML = '';
 
-            if (!products || products.length === 0) {
-                list.innerHTML = '<div style="text-align:center; color:#888; margin-top:20px;">ไม่พบสินค้า</div>';
-                return;
-            }
-
             products.forEach(item => {
-                // --- MAPPING DATA (จุดสำคัญที่แก้ให้ตรงกับตารางคุณ) ---
                 const code = item['รหัสสินค้า'] || '-';
                 const name = item['ชื่อการค้า'] || 'ไม่ระบุชื่อ';
                 const unit = item['หน่วย'] || '';
                 const price = item['ราคา'] ? formatNumber(item['ราคา']) : '0';
                 const qty = parseInt(item['คงเหลือ'] || 0);
-                // --------------------------------------------------
 
-                // กำหนดสถานะสี
                 let statusClass = 'status-ok';
                 let bgClass = 'bg-ok';
                 
                 if (qty <= 0) {
                     statusClass = 'status-out';
                     bgClass = 'bg-out';
-                } else if (qty < 5) { // เตือนเมื่อต่ำกว่า 5
+                } else if (qty < 5) {
                     statusClass = 'status-low';
                     bgClass = 'bg-low';
                 }
@@ -223,7 +245,6 @@
                 const card = document.createElement('div');
                 card.className = `product-card ${statusClass}`;
                 
-                // HTML ของการ์ดสินค้าแต่ละใบ
                 card.innerHTML = `
                     <div class="product-info">
                         <h3>${name}</h3>
@@ -246,21 +267,34 @@
         document.getElementById('searchInput').addEventListener('input', (e) => {
             const searchText = e.target.value.toLowerCase().trim();
             
+            // ถ้าช่องค้นหาว่าง ให้กลับไปสถานะ "พร้อมสแกน"
             if (!searchText) {
-                renderProducts(allProducts);
+                showStatus('ready');
                 return;
             }
 
+            // ค้นหาข้อมูล
             const filtered = allProducts.filter(item => {
-                // ค้นหาจาก 3 คอลัมน์: ชื่อการค้า, รหัสสินค้า, บาร์โค้ด
                 const n = String(item['ชื่อการค้า'] || '').toLowerCase();
                 const c = String(item['รหัสสินค้า'] || '').toLowerCase();
                 const b = String(item['บาร์โค้ด'] || '').toLowerCase();
                 
+                // ค้นหาแบบ "เจอแค่ส่วนหนึ่งก็เอา" (Partial Match)
                 return n.includes(searchText) || c.includes(searchText) || b.includes(searchText);
             });
-            renderProducts(filtered);
+
+            if (filtered.length > 0) {
+                showStatus('found');
+                renderProducts(filtered);
+            } else {
+                showStatus('notfound');
+            }
         });
+
+        // โฟกัสช่องค้นหาทันทีที่เปิดแอพ (สะดวกสำหรับเครื่องยิงบาร์โค้ดบางรุ่น)
+        window.onload = () => {
+             document.getElementById('searchInput').focus();
+        };
 
         fetchStock();
     </script>
