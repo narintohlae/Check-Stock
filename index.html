@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ระบบนับสต็อก (Offline Summary)</title>
+    <title>ระบบนับสต็อก (Fix Save Button)</title>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     
     <style>
@@ -105,8 +105,8 @@
             display: flex; justify-content: space-between; align-items: center;
             border-left: 5px solid #ddd;
         }
-        .summary-item.diff-plus { border-left-color: var(--success); } /* เกิน */
-        .summary-item.diff-minus { border-left-color: var(--danger); } /* ขาด */
+        .summary-item.diff-plus { border-left-color: var(--success); }
+        .summary-item.diff-minus { border-left-color: var(--danger); }
         
         .sum-info h4 { margin: 0; font-size: 1rem; }
         .sum-info small { color: #666; }
@@ -123,11 +123,10 @@
         .btn-copy { background: #333; color: white; border: none; padding: 12px; border-radius: 8px; }
         .btn-clear { background: var(--danger); color: white; border: none; padding: 12px; border-radius: 8px; }
 
-        /* Toast */
         #toast {
             position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
             background: rgba(0,0,0,0.8); color: white; padding: 10px 20px;
-            border-radius: 20px; opacity: 0; transition: opacity 0.3s; pointer-events: none;
+            border-radius: 20px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 1000;
         }
     </style>
 </head>
@@ -162,9 +161,7 @@
             <div id="totalSummary">รวม 0 รายการ</div>
         </div>
 
-        <div id="summaryList" class="summary-list">
-            <div style="text-align:center; color:#ccc; margin-top:50px;">ยังไม่มีรายการ</div>
-        </div>
+        <div id="summaryList" class="summary-list"></div>
 
         <div class="btn-action-group">
             <button class="btn-copy" onclick="copyToClipboard()">📋 คัดลอกส่งไลน์</button>
@@ -178,8 +175,11 @@
         const API_URL = 'https://script.google.com/macros/s/AKfycbxckFq5gHuPwv75iplUr4SlSd-xJyEQbu8Ikma2_GBHZ5ICxUUW2z3SwwtBjSDZiI_X/exec';
         
         let allProducts = [];
-        let countedList = JSON.parse(localStorage.getItem('countedStock')) || []; // โหลดข้อมูลเก่าถ้ามี
+        let countedList = JSON.parse(localStorage.getItem('countedStock')) || []; 
         let html5QrCode;
+        
+        // --- ตัวแปรสำคัญที่เพิ่มเข้ามาเพื่อแก้ปัญหา ---
+        let currentActiveItem = null; // เก็บข้อมูลสินค้าตัวที่กำลังแสดงผลอยู่
 
         // --- INIT ---
         async function fetchStock() {
@@ -204,7 +204,7 @@
             } else {
                 document.querySelector('.tab-btn:nth-child(2)').classList.add('active');
                 document.getElementById('page-summary').classList.add('active');
-                renderSummary(); // Refresh summary list
+                renderSummary();
             }
         }
 
@@ -216,6 +216,7 @@
             if(!term) { 
                 document.getElementById('scanResultArea').innerHTML = '';
                 document.getElementById('statusMessage').style.display = 'block';
+                currentActiveItem = null; // เคลียร์ค่าเมื่อไม่มีการค้นหา
                 return; 
             }
 
@@ -223,8 +224,8 @@
                 const n = String(p['ชื่อการค้า']||'').toLowerCase();
                 const c = String(p['รหัสสินค้า']||'').toLowerCase();
                 const b = String(p['บาร์โค้ด']||'').toLowerCase();
-                return n === term || c === term || b === term; // เอาแบบตรงเป๊ะก่อนเพื่อความแม่นยำ
-            }) || allProducts.find(p => { // ถ้าไม่เจอเป๊ะ ค่อยหาแบบคล้าย
+                return n === term || c === term || b === term;
+            }) || allProducts.find(p => {
                  const n = String(p['ชื่อการค้า']||'').toLowerCase();
                  return n.includes(term);
             });
@@ -235,13 +236,17 @@
             } else {
                 document.getElementById('scanResultArea').innerHTML = '<div style="text-align:center; margin-top:20px; color:red;">❌ ไม่พบสินค้า</div>';
                 document.getElementById('statusMessage').style.display = 'none';
+                currentActiveItem = null;
             }
         }
 
         function renderScanCard(item) {
+            // *** เก็บข้อมูลลงตัวแปรกลาง แทนการส่งเข้าไปในปุ่ม HTML ***
+            currentActiveItem = item; 
+
             const area = document.getElementById('scanResultArea');
-            const code = item['รหัสสินค้า'];
-            const name = item['ชื่อการค้า'];
+            const code = item['รหัสสินค้า'] || '-';
+            const name = item['ชื่อการค้า'] || 'ไม่ระบุชื่อ';
             const oldQty = parseInt(item['คงเหลือ'] || 0);
 
             area.innerHTML = `
@@ -257,7 +262,7 @@
                         <button class="btn-adj" onclick="adjQty(1)">+</button>
                     </div>
 
-                    <button class="btn-save" onclick="saveCount('${code}', '${name}', ${oldQty})">✅ ยืนยันยอดนับ</button>
+                    <button class="btn-save" onclick="confirmCurrentCount()">✅ ยืนยันยอดนับ</button>
                 </div>
             `;
         }
@@ -268,11 +273,24 @@
             el.value = Math.max(0, v + val);
         }
 
-        // --- SAVE TO LOCAL LIST ---
-        window.saveCount = (code, name, oldQty) => {
+        // --- NEW SAVE FUNCTION (แก้บั๊ก) ---
+        window.confirmCurrentCount = () => {
+            if (!currentActiveItem) {
+                alert("ไม่พบข้อมูลสินค้า");
+                return;
+            }
+
+            // ดึงค่าจากตัวแปรกลาง
+            const code = currentActiveItem['รหัสสินค้า'];
+            const name = currentActiveItem['ชื่อการค้า'];
+            const oldQty = parseInt(currentActiveItem['คงเหลือ'] || 0);
             const newQty = parseInt(document.getElementById('inputQty').value) || 0;
-            
-            // เช็คว่ามีรายการนี้อยู่แล้วไหม ถ้ามีให้ทับ
+
+            // บันทึก
+            saveCountProcess(code, name, oldQty, newQty);
+        }
+
+        function saveCountProcess(code, name, oldQty, newQty) {
             const existingIndex = countedList.findIndex(i => i.code === code);
             const record = {
                 code: code,
@@ -289,7 +307,6 @@
                 countedList.push(record);
             }
 
-            // บันทึกลงเครื่อง
             localStorage.setItem('countedStock', JSON.stringify(countedList));
             
             showToast(`บันทึก ${name} = ${newQty}`);
@@ -301,10 +318,11 @@
             document.getElementById('searchInput').value = '';
             document.getElementById('scanResultArea').innerHTML = '';
             document.getElementById('statusMessage').style.display = 'block';
+            currentActiveItem = null;
             document.getElementById('searchInput').focus();
         }
 
-        // --- SUMMARY PAGE LOGIC ---
+        // --- SUMMARY PAGE ---
         function renderSummary() {
             const list = document.getElementById('summaryList');
             document.getElementById('totalSummary').innerText = `รวม ${countedList.length} รายการ`;
@@ -314,7 +332,6 @@
                 return;
             }
 
-            // เรียงลำดับรายการล่าสุดขึ้นก่อน
             const sorted = [...countedList].reverse();
 
             list.innerHTML = sorted.map((item, index) => {
@@ -369,7 +386,7 @@
             text += `----------------\nรวม ${countedList.length} รายการ`;
 
             navigator.clipboard.writeText(text).then(() => {
-                alert('คัดลอกลง Clipboard แล้ว\nนำไปวางใน LINE หรือ Notes ได้เลย');
+                alert('คัดลอกลง Clipboard แล้ว');
             });
         }
 
@@ -413,7 +430,6 @@
 
         document.getElementById('searchInput').addEventListener('change', (e) => doSearch(e.target.value));
         
-        // Start
         fetchStock();
         updateBadge();
 
