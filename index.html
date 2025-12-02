@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>เช็คสต็อกสินค้า</title>
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --bg-color: #f3f4f6;
+            --card-bg: #ffffff;
+            --text-main: #1f2937;
+            --text-sub: #6b7280;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: 20px;
+            color: var(--text-main);
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+        }
+
+        /* Search Box Styles */
+        .search-box {
+            position: sticky;
+            top: 10px;
+            z-index: 100;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            background: white;
+            padding: 10px;
+            border-radius: 12px;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 16px;
+            box-sizing: border-box;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input[type="text"]:focus {
+            border-color: var(--primary-color);
+        }
+
+        /* Loading State */
+        #loading {
+            text-align: center;
+            color: var(--text-sub);
+            margin-top: 20px;
+        }
+
+        /* Product List (Card Style for Mobile) */
+        .product-list {
+            display: grid;
+            gap: 15px;
+        }
+
+        .product-card {
+            background: var(--card-bg);
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .product-info h3 {
+            margin: 0 0 5px 0;
+            font-size: 1.1rem;
+        }
+
+        .product-code {
+            font-size: 0.85rem;
+            color: var(--text-sub);
+            background: #eee;
+            padding: 2px 6px;
+            border-radius: 4px;
+            display: inline-block;
+        }
+
+        .stock-badge {
+            text-align: center;
+            min-width: 80px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-weight: bold;
+            color: white;
+            font-size: 0.9rem;
+        }
+
+        /* Stock Status Colors */
+        .stock-high { background-color: #10b981; } /* Green */
+        .stock-low { background-color: #f59e0b; }  /* Orange */
+        .stock-out { background-color: #ef4444; }  /* Red */
+
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>📦 เช็คสต็อกสินค้า</h1>
+        
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="🔍 ค้นหาชื่อสินค้า หรือรหัส...">
+        </div>
+
+        <div id="loading">กำลังโหลดข้อมูล...</div>
+        <div id="productList" class="product-list"></div>
+    </div>
+
+    <script>
+        // URL ของ Google Apps Script ที่คุณให้มา
+        const API_URL = 'https://script.google.com/macros/s/AKfycbxckFq5gHuPwv75iplUr4SlSd-xJyEQbu8Ikma2_GBHZ5ICxUUW2z3SwwtBjSDZiI_X/exec';
+        
+        let allProducts = [];
+
+        // ฟังก์ชันดึงข้อมูลเมื่อโหลดหน้าเว็บ
+        async function fetchStock() {
+            try {
+                const response = await fetch(API_URL);
+                const data = await response.json();
+                
+                // ตรวจสอบโครงสร้างข้อมูล (สมมติว่า API ส่งกลับมาเป็น data หรือ array โดยตรง)
+                // ถ้า API ส่งมาแบบ { data: [...] } ให้ใช้ data.data
+                // ถ้าส่งมาเป็น [...] เลย ให้ใช้ data
+                allProducts = Array.isArray(data) ? data : (data.data || []);
+
+                document.getElementById('loading').style.display = 'none';
+                renderProducts(allProducts);
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('loading').innerHTML = '❌ ไม่สามารถดึงข้อมูลได้ <br>กรุณาตรวจสอบลิงก์ หรือตั้งค่าสิทธิ์การเข้าถึง';
+            }
+        }
+
+        // ฟังก์ชันแสดงผลสินค้า
+        function renderProducts(products) {
+            const list = document.getElementById('productList');
+            list.innerHTML = '';
+
+            if (products.length === 0) {
+                list.innerHTML = '<div style="text-align:center; color:#888;">ไม่พบสินค้า</div>';
+                return;
+            }
+
+            products.forEach(item => {
+                // *** แก้ไขชื่อ Key ตรงนี้ให้ตรงกับ JSON ของคุณ ***
+                // เช่นถ้าใน Google Sheet หัวตารางคือ "Code", "Name", "Qty" ให้แก้ตามนั้น
+                const code = item.id || item.Code || item.code || '-'; 
+                const name = item.name || item.Name || 'สินค้าไม่ระบุชื่อ';
+                const qty = parseInt(item.qty || item.Qty || item.stock || 0);
+
+                // กำหนดสีตามจำนวนคงเหลือ
+                let badgeClass = 'stock-high';
+                let statusText = `${qty} ชิ้น`;
+
+                if (qty === 0) {
+                    badgeClass = 'stock-out';
+                    statusText = 'สินค้าหมด';
+                } else if (qty < 5) { // เตือนเมื่อเหลือน้อยกว่า 5
+                    badgeClass = 'stock-low';
+                }
+
+                const card = document.createElement('div');
+                card.className = 'product-card';
+                card.innerHTML = `
+                    <div class="product-info">
+                        <h3>${name}</h3>
+                        <span class="product-code">รหัส: ${code}</span>
+                    </div>
+                    <div class="stock-badge ${badgeClass}">
+                        ${statusText}
+                    </div>
+                `;
+                list.appendChild(card);
+            });
+        }
+
+        // ฟังก์ชันค้นหา
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            const searchText = e.target.value.toLowerCase();
+            const filtered = allProducts.filter(item => {
+                // *** แก้ไขชื่อ Key ตรงนี้ให้ตรงกับด้านบน ***
+                const name = (item.name || item.Name || '').toLowerCase();
+                const code = (item.id || item.Code || '').toString().toLowerCase();
+                return name.includes(searchText) || code.includes(searchText);
+            });
+            renderProducts(filtered);
+        });
+
+        // เริ่มทำงาน
+        fetchStock();
+    </script>
+</body>
+</html>
