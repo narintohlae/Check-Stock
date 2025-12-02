@@ -3,12 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>เช็คสต็อกสินค้า (Scan)</title>
+    <title>เช็คสต็อกสินค้า (Scan & Reset)</title>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     
     <style>
         :root {
             --primary-color: #2563eb;
+            --secondary-color: #6b7280;
             --bg-color: #f3f4f6;
             --card-bg: #ffffff;
             --text-main: #1f2937;
@@ -36,7 +37,7 @@
             color: #333;
         }
 
-        /* Search & Scan Area */
+        /* Control Panel */
         .control-panel {
             position: sticky;
             top: 10px;
@@ -50,65 +51,76 @@
 
         .input-group {
             display: flex;
-            gap: 10px;
+            gap: 8px; /* ระยะห่างระหว่างช่องพิมพ์กับปุ่ม */
         }
 
         input[type="text"] {
-            flex: 1;
-            padding: 12px 15px;
+            flex: 1; /* ขยายเต็มพื้นที่ที่เหลือ */
+            padding: 12px 10px;
             border: 2px solid #e5e7eb;
             border-radius: 8px;
             font-size: 16px;
             outline: none;
             transition: all 0.2s;
+            min-width: 0; /* ป้องกันการล้นจอในมือถือจอเล็ก */
         }
 
         input[type="text"]:focus {
             border-color: var(--primary-color);
         }
 
-        /* ปุ่มสแกน */
-        .btn-scan {
-            background-color: var(--primary-color);
-            color: white;
+        /* Button Styles */
+        button {
             border: none;
-            padding: 0 20px;
             border-radius: 8px;
             font-size: 1rem;
             cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 5px;
+            justify-content: center;
+            padding: 0 12px;
+            white-space: nowrap; /* ห้ามตัดบรรทัด */
+            transition: transform 0.1s;
         }
 
-        .btn-scan:active {
+        button:active {
             transform: scale(0.95);
         }
 
-        /* พื้นที่กล้อง */
+        .btn-scan {
+            background-color: var(--primary-color);
+            color: white;
+            font-weight: 500;
+        }
+
+        .btn-reset {
+            background-color: #e5e7eb;
+            color: #374151;
+            font-weight: 500;
+            font-size: 1.2rem; /* ไอคอนใหญ่หน่อย */
+        }
+
+        /* Camera Area */
         #reader {
             width: 100%;
             margin-top: 10px;
             border-radius: 8px;
             overflow: hidden;
-            display: none; /* ซ่อนไว้ก่อน */
+            display: none;
             background: black;
         }
 
-        /* ปุ่มปิดกล้อง */
         #stopScanBtn {
             display: none;
             width: 100%;
             margin-top: 10px;
-            padding: 10px;
+            padding: 12px;
             background-color: #ef4444;
             color: white;
-            border: none;
-            border-radius: 8px;
             font-weight: bold;
         }
 
-        /* Status Message */
+        /* Status & Product List */
         #statusMessage {
             text-align: center;
             color: var(--text-sub);
@@ -123,7 +135,6 @@
             opacity: 0.5;
         }
 
-        /* Product List */
         .product-list {
             display: grid;
             gap: 12px;
@@ -183,8 +194,13 @@
         
         <div class="control-panel">
             <div class="input-group">
-                <input type="text" id="searchInput" placeholder="พิมพ์ชื่อ หรือรหัสสินค้า...">
-                <button class="btn-scan" onclick="startScanning()">📷 สแกน</button>
+                <input type="text" id="searchInput" placeholder="พิมพ์ชื่อ / รหัส...">
+                <button class="btn-scan" onclick="startScanning()">
+                    📷 สแกน
+                </button>
+                <button class="btn-reset" onclick="resetApp()" title="เริ่มใหม่">
+                    🔄
+                </button>
             </div>
             
             <div id="reader"></div>
@@ -203,7 +219,7 @@
         const API_URL = 'https://script.google.com/macros/s/AKfycbxckFq5gHuPwv75iplUr4SlSd-xJyEQbu8Ikma2_GBHZ5ICxUUW2z3SwwtBjSDZiI_X/exec';
         
         let allProducts = [];
-        let html5QrCode; // ตัวแปรสำหรับกล้อง
+        let html5QrCode;
 
         function formatNumber(num) {
             return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
@@ -221,6 +237,7 @@
             }
         }
 
+        // ฟังก์ชันจัดการสถานะหน้าจอ
         function showStatus(state) {
             const msgDiv = document.getElementById('statusMessage');
             const listDiv = document.getElementById('productList');
@@ -236,6 +253,14 @@
             } else if (state === 'found') {
                 msgDiv.style.display = 'none';
             }
+        }
+
+        // ฟังก์ชันรีเซตระบบ (เริ่มใหม่)
+        function resetApp() {
+            document.getElementById('searchInput').value = ''; // ล้างช่องค้นหา
+            stopScanning(); // ปิดกล้องถ้าเปิดอยู่
+            showStatus('ready'); // กลับไปหน้าพร้อมสแกน
+            document.getElementById('searchInput').focus(); // เอาเคอร์เซอร์ไปรอที่ช่องพิมพ์
         }
 
         function renderProducts(products) {
@@ -273,10 +298,9 @@
             });
         }
 
-        // --- ฟังก์ชันค้นหา ---
         function doSearch(keyword) {
             const searchText = keyword.toLowerCase().trim();
-            document.getElementById('searchInput').value = keyword; // ใส่ค่าลงในช่อง input
+            document.getElementById('searchInput').value = keyword;
 
             if (!searchText) {
                 showStatus('ready');
@@ -298,39 +322,29 @@
             }
         }
 
-        // --- ฟังก์ชันเกี่ยวกับกล้อง (Scanner) ---
+        // --- Camera Logic ---
         function startScanning() {
             const readerDiv = document.getElementById('reader');
             const stopBtn = document.getElementById('stopScanBtn');
             
             readerDiv.style.display = 'block';
             stopBtn.style.display = 'block';
-            
-            // เคลียร์ผลการค้นหาเก่า
             document.getElementById('productList').innerHTML = '';
             document.getElementById('statusMessage').style.display = 'none';
 
             html5QrCode = new Html5Qrcode("reader");
-            
             const config = { fps: 10, qrbox: { width: 250, height: 250 } };
             
-            // เปิดกล้องหลัง (environment)
             html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
             .catch(err => {
                 console.log(err);
-                alert("ไม่สามารถเปิดกล้องได้: กรุณาอนุญาตให้เข้าถึงกล้องบน Browser");
+                alert("กรุณาอนุญาตการใช้กล้อง");
                 stopScanning();
             });
         }
 
-        function onScanSuccess(decodedText, decodedResult) {
-            // เมื่อสแกนเจอ
-            console.log(`Scan result: ${decodedText}`);
-            
-            // หยุดกล้อง
+        function onScanSuccess(decodedText) {
             stopScanning();
-            
-            // นำค่าที่สแกนได้ไปค้นหาทันที
             doSearch(decodedText);
         }
 
@@ -340,21 +354,17 @@
                     document.getElementById('reader').style.display = 'none';
                     document.getElementById('stopScanBtn').style.display = 'none';
                     html5QrCode.clear();
-                }).catch(err => {
-                    console.log("Failed to stop", err);
-                });
+                }).catch(err => console.log(err));
             } else {
                 document.getElementById('reader').style.display = 'none';
                 document.getElementById('stopScanBtn').style.display = 'none';
             }
         }
 
-        // Event Listeners
         document.getElementById('searchInput').addEventListener('input', (e) => {
             doSearch(e.target.value);
         });
 
-        // เริ่มโหลดข้อมูล
         fetchStock();
 
     </script>
