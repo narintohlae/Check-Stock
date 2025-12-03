@@ -402,18 +402,38 @@
         }
 
         // --- CAMERA ---
-        function startScanning() {
+function startScanning() {
             document.getElementById('reader').style.display = 'block';
             document.getElementById('stopScanBtn').style.display = 'block';
             document.getElementById('scanResultArea').innerHTML = '';
             document.getElementById('statusMessage').style.display = 'none';
 
             html5QrCode = new Html5Qrcode("reader");
-            html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, (txt) => {
-                stopScanning();
-                doSearch(txt);
-            }).catch(err => {
-                alert('เปิดกล้องไม่ได้');
+            
+            // ตั้งค่า QR Box ให้เล็กลงหน่อย เพื่อให้คนถอยมือถือออกห่าง
+            // และบังคับความละเอียดเป็น HD เพื่อให้กล้องชัดขึ้น
+            const config = { 
+                fps: 10, 
+                qrbox: { width: 200, height: 200 }, // ลดขนาดกรอบลงเล็กน้อย
+                aspectRatio: 1.0,
+                videoConstraints: {
+                    facingMode: "environment", // กล้องหลัง
+                    height: { min: 720, ideal: 1080 }, // บังคับความละเอียด HD
+                    width: { min: 1280, ideal: 1920 },
+                    focusMode: "continuous" // พยายามสั่งให้โฟกัสต่อเนื่อง (บางเครื่องรองรับ)
+                }
+            };
+
+            html5QrCode.start(
+                { facingMode: "environment" }, 
+                config, 
+                (txt) => {
+                    stopScanning();
+                    doSearch(txt);
+                }
+            ).catch(err => {
+                console.error(err);
+                alert('เปิดกล้องไม่ได้ หรือสิทธิ์ถูกปฏิเสธ');
                 stopScanning();
             });
         }
@@ -436,3 +456,4 @@
     </script>
 </body>
 </html>
+
